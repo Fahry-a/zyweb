@@ -380,7 +380,7 @@ const ChatTab = () => {
 };
 
 // Overview Tab Component
-const OverviewTab = ({ user, onChangePassword, onDeleteAccount }) => {
+const OverviewTab = ({ user, onChangePassword, onDeleteAccount, onTabChange }) => { // Change setTabValue to onTabChange
   const navigate = useNavigate();
 
   return (
@@ -429,6 +429,30 @@ const OverviewTab = ({ user, onChangePassword, onDeleteAccount }) => {
 
             {/* Action Buttons */}
             <Box sx={{ mt: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <Button
+                variant="contained"
+                startIcon={<StorageIcon />}
+                onClick={() => onTabChange(1)} // Use onTabChange instead of setTabValue
+                sx={{
+                  bgcolor: 'info.main',
+                  '&:hover': { bgcolor: 'info.dark' },
+                }}
+              >
+                Cloud Storage
+              </Button>
+
+              <Button
+                variant="contained"
+                startIcon={<ChatIcon />}
+                onClick={() => onTabChange(2)} // Use onTabChange instead of setTabValue
+                sx={{
+                  bgcolor: 'success.main',
+                  '&:hover': { bgcolor: 'success.dark' },
+                }}
+              >
+                Messages
+              </Button>
+
               <Button
                 variant="contained"
                 startIcon={<KeyIcon />}
@@ -628,6 +652,7 @@ const Dashboard = () => {
             user={user}
             onChangePassword={handleOpenPasswordDialog}
             onDeleteAccount={handleOpenDeleteDialog}
+            onTabChange={setTabValue}
           />
         )}
         {tabValue === 1 && <StorageTab />}

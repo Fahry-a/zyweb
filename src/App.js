@@ -9,6 +9,9 @@ import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import PrivateRoute from './components/PrivateRoute';
 import AdminRoute from './components/AdminRoute';
+import CloudStorage from './pages/CloudStorage';
+import Chat from './pages/Chat';
+
 
 const theme = createTheme({
   palette: {
@@ -101,6 +104,22 @@ function App() {
                 <AdminRoute>
                   <AdminDashboard />
                 </AdminRoute>
+              }
+            />
+            <Route
+               path="/cloud-storage"
+               element={
+                 <PrivateRoute>
+                   <CloudStorage />
+                 </PrivateRoute>
+              }
+            />
+            <Route
+              path="/chat"
+              element={
+                <PrivateRoute>
+                <Chat />
+                </PrivateRoute>
               }
             />
           </Routes>
