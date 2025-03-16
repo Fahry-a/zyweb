@@ -1,21 +1,25 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
+const { authMiddleware } = require('../middleware/authMiddleware');
 const storageController = require('../controllers/storageController');
-const auth = require('../middleware/auth');
+const upload = require('../middleware/uploadMiddleware');
 
-const upload = multer({
-  dest: 'uploads/',
-  limits: { fileSize: 1024 * 1024 * 100 } // 100MB max file size
-});
+// Semua route membutuhkan autentikasi
+router.use(authMiddleware);
 
-router.use(auth);
-
-// Storage routes
+// Get storage quota
 router.get('/quota', storageController.getQuota);
+
+// Get list of files
 router.get('/files', storageController.getFiles);
+
+// Upload file
 router.post('/upload', upload.single('file'), storageController.uploadFile);
-router.delete('/files/:fileId', storageController.deleteFile);
-router.get('/files/:fileId/download', storageController.downloadFile);
+
+// Download file
+router.get('/download/:id', storageController.downloadFile);
+
+// Delete file
+router.delete('/files/:id', storageController.deleteFile);
 
 module.exports = router;

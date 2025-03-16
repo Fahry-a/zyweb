@@ -8,6 +8,7 @@ const db = require('./config/database');
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/user');
+const storageRoutes = require('./routes/storage');
 
 // Load environment variables
 dotenv.config();
@@ -26,6 +27,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/storage', storageRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

@@ -17,17 +17,15 @@ const pool = mysql.createPool({
 // Convert pool to use promises
 const promisePool = pool.promise();
 
-// Test connection function
-const testConnection = async () => {
+// Test connection using async/await
+(async () => {
   try {
     const connection = await promisePool.getConnection();
-    console.log('Database connection established successfully');
+    console.log('Database connected successfully');
     connection.release();
-    return true;
-  } catch (error) {
-    console.error('Error connecting to database:', error);
-    throw error;
+  } catch (err) {
+    console.error('Database connection failed:', err);
   }
-};
+})();
 
 module.exports = promisePool;

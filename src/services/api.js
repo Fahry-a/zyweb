@@ -181,6 +181,26 @@ export const unsuspendUser = async (userId) => {
   }
 };
 
+export const storageApi = {
+  getQuota: () => api.get('/storage/quota'),
+  getFiles: () => api.get('/storage/files'),
+  uploadFile: (formData, onUploadProgress) => api.post('/storage/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    onUploadProgress: (progressEvent) => {
+      if (onUploadProgress) {
+        const progress = (progressEvent.loaded / progressEvent.total) * 100;
+        onUploadProgress(progress);
+      }
+    },
+  }),
+  downloadFile: (fileId) => api.get(`/storage/download/${fileId}`, {
+    responseType: 'blob',
+  }),
+  deleteFile: (fileId) => api.delete(`/storage/files/${fileId}`),
+};
+
 export const getLogs = async () => {
   try {
     const response = await api.get('/admin/logs');

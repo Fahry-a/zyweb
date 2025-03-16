@@ -36,10 +36,10 @@ CREATE TABLE `admin_logs` (
 );
 
 -- Tabel Storage Quotas
-CREATE TABLE `storage_quotas` (
+CREATE TABLE IF NOT EXISTS `storage_quotas` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
   `user_id` INT(11) NOT NULL,
-  `total_quota` BIGINT(20) NOT NULL,
+  `total_quota` BIGINT(20) NOT NULL DEFAULT 5368709120, -- 5GB default
   `used_quota` BIGINT(20) DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
@@ -47,14 +47,14 @@ CREATE TABLE `storage_quotas` (
 );
 
 -- Tabel Stored Files
-CREATE TABLE `stored_files` (
+CREATE TABLE IF NOT EXISTS `stored_files` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
   `user_id` INT(11) NOT NULL,
   `filename` VARCHAR(255) NOT NULL,
   `original_name` VARCHAR(255) NOT NULL,
   `mime_type` VARCHAR(100) NOT NULL,
   `size` BIGINT(20) NOT NULL,
-  `path` VARCHAR(500) NOT NULL,
+  `file_data` LONGBLOB NOT NULL,
   `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP(),
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),

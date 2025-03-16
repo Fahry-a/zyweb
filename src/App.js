@@ -107,7 +107,7 @@ function App() {
               }
             />
             <Route
-               path="/cloud-storage"
+               path="/cloudstorage"
                element={
                  <PrivateRoute>
                    <CloudStorage />
