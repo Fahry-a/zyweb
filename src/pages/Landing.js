@@ -1,81 +1,135 @@
 import React from 'react';
-import { Box, Button, Container, Typography, Paper } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+
+import {
+  Box,
+  Container,
+  Typography,
+  Button,
+  Grid,
+  Card,
+  CardContent,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+} from '@mui/material';
+import {
+  Storage as StorageIcon,
+  Chat as ChatIcon,
+  CloudUpload as CloudUploadIcon,
+  Check as CheckIcon,
+} from '@mui/icons-material';
 
 const Landing = () => {
-  const navigate = useNavigate();
-
   return (
-    <Box
-      sx={{
-        bgcolor: 'background.default',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-      }}
-    >
-      <Container maxWidth="sm">
-        <Paper
-          elevation={0}
-          sx={{
-            p: 4,
-            textAlign: 'center',
-            bgcolor: 'background.paper',
-            borderRadius: 4,
-          }}
-        >
-          <Typography
-            variant="h3"
-            component="h1"
-            gutterBottom
-            sx={{
-              fontWeight: 700,
-              background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-              backgroundClip: 'text',
-              textFillColor: 'transparent',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
+    <Box sx={{ bgcolor: 'background.default', minHeight: '100vh' }}>
+      {/* Hero Section */}
+      <Box sx={{ 
+        bgcolor: 'primary.dark', 
+        color: 'white',
+        py: 8
+      }}>
+        <Container maxWidth="lg">
+          <Typography variant="h2" gutterBottom>
+            Your Complete Cloud Solution
+          </Typography>
+          <Typography variant="h5" gutterBottom sx={{ mb: 4 }}>
+            Store, share, and communicate - all in one place
+          </Typography>
+          <Button
+            variant="contained"
+            size="large"
+            sx={{ 
+              bgcolor: 'secondary.main',
+              '&:hover': { bgcolor: 'secondary.dark' }
             }}
           >
-            Welcome to Our Platform
-          </Typography>
-          <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
-            Your one-stop solution for everything you need
-          </Typography>
-          <Box sx={{ mt: 4, display: 'flex', gap: 2, justifyContent: 'center' }}>
-            <Button
-              variant="contained"
-              size="large"
-              onClick={() => navigate('/login')}
-              sx={{
-                px: 4,
-                py: 1.5,
-                bgcolor: 'primary.main',
-                '&:hover': { bgcolor: 'primary.dark' },
-              }}
-            >
-              Login
-            </Button>
-            <Button
-              variant="outlined"
-              size="large"
-              onClick={() => navigate('/register')}
-              sx={{
-                px: 4,
-                py: 1.5,
-                borderColor: 'primary.main',
-                color: 'primary.main',
-                '&:hover': {
-                  borderColor: 'primary.dark',
-                  color: 'primary.dark',
-                },
-              }}
-            >
-              Register
-            </Button>
-          </Box>
-        </Paper>
+            Get Started
+          </Button>
+        </Container>
+      </Box>
+
+      {/* Features Section */}
+      <Container maxWidth="lg" sx={{ my: 8 }}>
+        <Grid container spacing={4}>
+          {/* Cloud Storage */}
+          <Grid item xs={12} md={4}>
+            <Card>
+              <CardContent>
+                <StorageIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                <Typography variant="h5" gutterBottom>
+                  Cloud Storage
+                </Typography>
+                <List>
+                  <ListItem>
+                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                    <ListItemText primary="5GB Free Storage" />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                    <ListItemText primary="20GB Premium Storage" />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                    <ListItemText primary="All File Types Supported" />
+                  </ListItem>
+                </List>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Media Storage */}
+          <Grid item xs={12} md={4}>
+            <Card>
+              <CardContent>
+                <CloudUploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                <Typography variant="h5" gutterBottom>
+                  Media Storage
+                </Typography>
+                <List>
+                  <ListItem>
+                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                    <ListItemText primary="Photo Storage" />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                    <ListItemText primary="Video Storage" />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                    <ListItemText primary="All Formats Supported" />
+                  </ListItem>
+                </List>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Messaging */}
+          <Grid item xs={12} md={4}>
+            <Card>
+              <CardContent>
+                <ChatIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                <Typography variant="h5" gutterBottom>
+                  Messaging
+                </Typography>
+                <List>
+                  <ListItem>
+                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                    <ListItemText primary="Private Messaging" />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                    <ListItemText primary="Group Chats" />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                    <ListItemText primary="File Sharing" />
+                  </ListItem>
+                </List>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
       </Container>
     </Box>
   );
