@@ -380,7 +380,7 @@ const ChatTab = () => {
 };
 
 // Overview Tab Component
-const OverviewTab = ({ user, onChangePassword, onDeleteAccount, onTabChange }) => { // Change setTabValue to onTabChange
+const OverviewTab = ({ user, onChangePassword, onDeleteAccount }) => {
   const navigate = useNavigate();
 
   return (
@@ -427,32 +427,8 @@ const OverviewTab = ({ user, onChangePassword, onDeleteAccount, onTabChange }) =
 
             <Divider sx={{ my: 2 }} />
 
-            {/* Action Buttons */}
+            {/* Account Management Buttons */}
             <Box sx={{ mt: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <Button
-                variant="contained"
-                startIcon={<StorageIcon />}
-                onClick={() => onTabChange(1)} // Use onTabChange instead of setTabValue
-                sx={{
-                  bgcolor: 'info.main',
-                  '&:hover': { bgcolor: 'info.dark' },
-                }}
-              >
-                Cloud Storage
-              </Button>
-
-              <Button
-                variant="contained"
-                startIcon={<ChatIcon />}
-                onClick={() => onTabChange(2)} // Use onTabChange instead of setTabValue
-                sx={{
-                  bgcolor: 'success.main',
-                  '&:hover': { bgcolor: 'success.dark' },
-                }}
-              >
-                Messages
-              </Button>
-
               <Button
                 variant="contained"
                 startIcon={<KeyIcon />}
@@ -500,16 +476,64 @@ const OverviewTab = ({ user, onChangePassword, onDeleteAccount, onTabChange }) =
           </CardContent>
         </Card>
       </Grid>
+      <Grid item xs={12} sx={{ mt: 3, pl: 0 }}>
+        <Box sx={{ 
+          display: 'flex', 
+          gap: 2, // Memberikan jarak antar tombol
+          justifyContent: 'flex-start' // Membuat tombol mepet ke kiri
+        }}>
+          <Button
+            variant="contained"
+            onClick={() => navigate('/cloudstorage')}
+            sx={{
+              width: '100px', // Lebar tombol
+              height: '100px', // Tinggi sama dengan lebar untuk bentuk kotak sempurna
+              bgcolor: 'info.main',
+              '&:hover': { bgcolor: 'info.dark' },
+              borderRadius: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              minWidth: 'unset', // Menghapus minimal width default dari Button
+              padding: 1
+            }}
+          >
+            <StorageIcon sx={{ fontSize: 30 }} />
+            Cloud Storage
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={() => navigate('/chat')}
+            sx={{
+              width: '100px', // Lebar tombol
+              height: '100px', // Tinggi sama dengan lebar untuk bentuk kotak sempurna
+              bgcolor: 'success.main',
+              '&:hover': { bgcolor: 'success.dark' },
+              borderRadius: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              minWidth: 'unset', // Menghapus minimal width default dari Button
+              padding: 1
+            }}
+          >
+            <ChatIcon sx={{ fontSize: 30 }} />
+            Chat
+          </Button>
+        </Box>
+      </Grid>
     </Grid>
   );
 };
 
-// Main Dashboard Component
+
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [currentDateTime, setCurrentDateTime] = useState('');
-  const [tabValue, setTabValue] = useState(0);
   const [openPasswordDialog, setOpenPasswordDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [passwordData, setPasswordData] = useState({
@@ -634,29 +658,14 @@ const Dashboard = () => {
             <LogoutIcon />
           </IconButton>
         </Toolbar>
-
-        <Tabs
-          value={tabValue}
-          onChange={(e, newValue) => setTabValue(newValue)}
-          sx={{ bgcolor: 'primary.dark' }}
-        >
-          <Tab icon={<DashboardIcon />} label="Overview" />
-          <Tab icon={<StorageIcon />} label="Storage" />
-          <Tab icon={<ChatIcon />} label="Messages" />
-        </Tabs>
       </AppBar>
 
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        {tabValue === 0 && (
-          <OverviewTab 
-            user={user}
-            onChangePassword={handleOpenPasswordDialog}
-            onDeleteAccount={handleOpenDeleteDialog}
-            onTabChange={setTabValue}
-          />
-        )}
-        {tabValue === 1 && <StorageTab />}
-        {tabValue === 2 && <ChatTab />}
+        <OverviewTab 
+          user={user}
+          onChangePassword={handleOpenPasswordDialog}
+          onDeleteAccount={handleOpenDeleteDialog}
+        />
 
         {/* Password Change Dialog */}
         <Dialog
