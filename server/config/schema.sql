@@ -37,13 +37,14 @@ CREATE TABLE `admin_logs` (
 
 -- Tabel Storage Quotas
 CREATE TABLE IF NOT EXISTS `storage_quotas` (
-  `id` INT(11) NOT NULL AUTO_INCREMENT,
-  `user_id` INT(11) NOT NULL,
-  `total_quota` BIGINT(20) NOT NULL DEFAULT 5368709120, -- 5GB default
-  `used_quota` BIGINT(20) DEFAULT 0,
-  PRIMARY KEY (`id`),
-  KEY `user_id` (`user_id`),
-  CONSTRAINT `storage_quotas_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  `id` INT PRIMARY KEY AUTO_INCREMENT,
+  `user_id` INT NOT NULL,
+  `total_quota` BIGINT NOT NULL,
+  `used_quota` BIGINT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+   UNIQUE KEY unique_user_quota (user_id)
 );
 
 -- Tabel Stored Files

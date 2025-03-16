@@ -1,331 +1,372 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Container,
-  Typography,
-  Button,
-  IconButton,
-  Grid,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  LinearProgress,
-  Alert,
-  Snackbar,
-  CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+    Box, Container, Typography, Button, IconButton,
+    Grid, Paper, LinearProgress, Alert, Snackbar,
+    List, ListItem, ListItemIcon, ListItemText,
+    Dialog, DialogTitle, DialogContent, DialogActions,
+    Menu, MenuItem, AudiotrackIcon 
 } from '@mui/material';
 import {
-  CloudUpload as UploadIcon,
-  Delete as DeleteIcon,
-  Download as DownloadIcon,
-  Description as FileIcon,
-  Image as ImageIcon,
-  PictureAsPdf as PdfIcon,
-  InsertDriveFile as DefaultFileIcon,
-  ArrowBack as ArrowBackIcon,
+    CloudUpload, Delete, Download, Description,
+    MoreVert, PictureAsPdf, Image, InsertDriveFile
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
+import { useDropzone } from 'react-dropzone';
+import { storageApi } from '../services/storage';
+import { formatFileSize, getFileIcon } from '../utils/fileHelpers';
+import { debounce } from 'lodash';
 
 const CloudStorage = () => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const [files, setFiles] = useState([]);
-  const [storage, setStorage] = useState({ used: 0, total: 0 });
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [files, setFiles] = useState([]);
+    const [storage, setStorage] = useState({ used: 0, total: 0 });
+    const [uploads, setUploads] = useState(new Map());
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [contextMenu, setContextMenu] = useState(null);
+    const [sortOrder, setSortOrder] = useState({ field: 'created_at', direction: 'desc' });
+    const [page, setPage] = useState(1);
+    const [loading, setLoading] = useState(false);
 
-  // Format file size
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-  };
+    // Load storage data with debounce
+    const loadStorageData = useCallback(
+        debounce(async () => {
+            try {
+                setLoading(true);
+                const [quotaResponse, filesResponse] = await Promise.all([
+                    storageApi.getQuota(),
+                    storageApi.getFiles(page, 20, sortOrder.field, sortOrder.direction)
+                ]);
+                
+                setStorage(quotaResponse.data);
+                setFiles(prev => [...prev, ...filesResponse.data]);
+            } catch (err) {
+                setError('Failed to load storage data');
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        }, 300),
+        [page, sortOrder]
+    );
 
-  // Get file icon based on mime type
-  const getFileIcon = (mimeType) => {
-    if (mimeType.startsWith('image/')) return <ImageIcon />;
-    if (mimeType === 'application/pdf') return <PdfIcon />;
-    if (mimeType.includes('document')) return <FileIcon />;
-    return <DefaultFileIcon />;
-  };
+    useEffect(() => {
+        loadStorageData();
+    }, [loadStorageData]);
 
-  // Load files and storage info
-  const loadStorageData = async () => {
-    try {
-      const [filesResponse, quotaResponse] = await Promise.all([
-        axios.get('/api/storage/files'),
-        axios.get('/api/storage/quota')
-      ]);
+    // File upload with drag & drop
+    const onDrop = useCallback(async (acceptedFiles) => {
+        for (const file of acceptedFiles) {
+            if (storage.used + file.size > storage.total) {
+                setError('Storage quota exceeded');
+                continue;
+            }
 
-      setFiles(filesResponse.data);
-      setStorage(quotaResponse.data);
-    } catch (err) {
-      setError('Failed to load storage data');
-      console.error('Error loading storage data:', err);
-    }
-  };
+            const uploadId = Date.now().toString();
+            setUploads(prev => new Map(prev).set(uploadId, { 
+                file,
+                progress: 0,
+                status: 'uploading'
+            }));
 
-  useEffect(() => {
-    loadStorageData();
-  }, []);
+            try {
+                let cancelUpload;
+                await storageApi.uploadFile(
+                    file,
+                    (progress) => {
+                        setUploads(prev => new Map(prev).set(uploadId, { 
+                            file,
+                            progress,
+                            status: 'uploading'
+                        }));
+                    },
+                    (cancel) => { cancelUpload = cancel }
+                );
 
-  // Handle file upload
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    // Check file size
-    if (storage.used + file.size > storage.total) {
-      setError('Not enough storage space');
-      return;
-    }
-
-    setUploading(true);
-    setUploadProgress(0);
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      await axios.post('/api/storage/upload', formData, {
-        onUploadProgress: (progressEvent) => {
-          const progress = (progressEvent.loaded / progressEvent.total) * 100;
-          setUploadProgress(progress);
+                setUploads(prev => {
+                    const newMap = new Map(prev);
+                    newMap.delete(uploadId);
+                    return newMap;
+                });
+                
+                setSuccess('File uploaded successfully');
+                loadStorageData();
+            } catch (err) {
+                setUploads(prev => new Map(prev).set(uploadId, { 
+                    file,
+                    progress: 0,
+                    status: 'error',
+                    error: err.message
+                }));
+                console.error('Upload error:', err);
+            }
         }
-      });
+    }, [storage, loadStorageData]);
 
-      setSuccess('File uploaded successfully');
-      loadStorageData();
-    } catch (err) {
-      setError('Failed to upload file');
-      console.error('Upload error:', err);
-    } finally {
-      setUploading(false);
-      setUploadProgress(0);
-    }
-  };
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+        onDrop,
+        multiple: true
+    });
 
-  // Handle file download
-  const handleDownload = async (fileId, fileName) => {
-    try {
-      const response = await axios.get(`/api/storage/download/${fileId}`, {
-        responseType: 'blob'
-      });
+    // File operations
+    const handleDownload = async (file) => {
+        try {
+            const response = await storageApi.downloadFile(
+                file.id,
+                (progress) => {
+                    // Update download progress if needed
+                }
+            );
+            
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', file.name);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            setError('Failed to download file');
+            console.error(err);
+        }
+    };
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', fileName);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      setError('Failed to download file');
-      console.error('Download error:', err);
-    }
-  };
+    const handleDelete = async (file) => {
+        try {
+            await storageApi.deleteFile(file.id);
+            setSuccess('File deleted successfully');
+            loadStorageData();
+        } catch (err) {
+            setError('Failed to delete file');
+            console.error(err);
+        }
+    };
 
-  // Handle file deletion
-  const handleDelete = async () => {
-    if (!selectedFile) return;
-
-    try {
-      await axios.delete(`/api/storage/files/${selectedFile.id}`);
-      setSuccess('File deleted successfully');
-      loadStorageData();
-      setDeleteConfirmOpen(false);
-      setSelectedFile(null);
-    } catch (err) {
-      setError('Failed to delete file');
-      console.error('Delete error:', err);
-    }
-  };
-
-  return (
-    <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: 3 }}>
-      <Container maxWidth="lg">
-        {/* Header */}
-        <Box sx={{ mb: 4, display: 'flex', alignItems: 'center' }}>
-          <IconButton onClick={() => navigate('/dashboard')} sx={{ mr: 2 }}>
-            <ArrowBackIcon />
-          </IconButton>
-          <Typography variant="h4" component="h1">
-            Cloud Storage
-          </Typography>
-        </Box>
-
-        {/* Storage Info */}
+    // Render functions
+    const renderStorageInfo = () => (
         <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Storage Usage
-          </Typography>
-          <LinearProgress 
-            variant="determinate"
-            value={(storage.used / storage.total) * 100}
-            sx={{ 
-              height: 10,
-              borderRadius: 5,
-              mb: 1,
-              '& .MuiLinearProgress-bar': {
-                bgcolor: (storage.used / storage.total) > 0.9 ? 'error.main' : 'primary.main'
-              }
+            <Typography variant="h6" gutterBottom>
+                Storage Usage
+            </Typography>
+            <LinearProgress 
+                variant="determinate"
+                value={(storage.used / storage.total) * 100}
+                sx={{ 
+                    height: 10,
+                    borderRadius: 5,
+                    mb: 1,
+                    '& .MuiLinearProgress-bar': {
+                        bgcolor: (storage.used / storage.total) > 0.9 ? 'error.main' : 'primary.main'
+                    }
+                }}
+            />
+            <Typography variant="body2" color="text.secondary">
+                {formatFileSize(storage.used)} of {formatFileSize(storage.total)} used
+                ({Math.round((storage.used / storage.total) * 100)}%)
+            </Typography>
+        </Paper>
+    );
+
+    const renderUploadArea = () => (
+        <Paper
+            {...getRootProps()}
+            sx={{
+                p: 3,
+                mb: 3,
+                border: '2px dashed',
+                borderColor: isDragActive ? 'primary.main' : 'grey.300',
+                bgcolor: isDragActive ? 'action.hover' : 'background.paper',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease'
             }}
-          />
-          <Typography variant="body2" color="text.secondary">
-            {formatFileSize(storage.used)} of {formatFileSize(storage.total)} used
-            ({Math.round((storage.used / storage.total) * 100)}%)
-          </Typography>
-        </Paper>
-
-        {/* Upload Section */}
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <input
-            type="file"
-            id="file-upload"
-            style={{ display: 'none' }}
-            onChange={handleFileUpload}
-          />
-          <label htmlFor="file-upload">
-            <Button
-              variant="contained"
-              component="span"
-              startIcon={<UploadIcon />}
-              disabled={uploading || storage.used >= storage.total}
-            >
-              Upload File
-            </Button>
-          </label>
-
-          {uploading && (
-            <Box sx={{ mt: 2 }}>
-              <LinearProgress variant="determinate" value={uploadProgress} />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Uploading... {Math.round(uploadProgress)}%
-              </Typography>
+        >
+            <input {...getInputProps()} />
+            <Box sx={{ textAlign: 'center' }}>
+                <CloudUpload sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                <Typography variant="h6" gutterBottom>
+                    {isDragActive ? 
+                        'Drop files here...' : 
+                        'Drag & drop files here, or click to select files'
+                    }
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                    Maximum file size: {formatFileSize(storage.total - storage.used)}
+                </Typography>
             </Box>
-          )}
         </Paper>
+    );
 
-        {/* Files Table */}
-        <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>File</TableCell>
-                  <TableCell>Size</TableCell>
-                  <TableCell>Upload Date</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {files.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} align="center">
-                      No files uploaded yet
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  files.map((file) => (
-                    <TableRow key={file.id}>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {getFileIcon(file.type)}
-                          {file.name}
-                        </Box>
-                      </TableCell>
-                      <TableCell>{formatFileSize(file.size)}</TableCell>
-                      <TableCell>
-                        {new Date(file.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell align="right">
-                        <IconButton
-                          onClick={() => handleDownload(file.id, file.name)}
-                          title="Download"
-                        >
-                          <DownloadIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => {
+    const renderUploads = () => (
+        uploads.size > 0 && (
+            <Paper sx={{ p: 3, mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                    Active Uploads
+                </Typography>
+                <List>
+                    {Array.from(uploads.entries()).map(([id, upload]) => (
+                        <ListItem key={id}>
+                            <ListItemIcon>
+                                {getFileIcon(upload.file.type)}
+                            </ListItemIcon>
+                            <ListItemText
+                                primary={upload.file.name}
+                                secondary={
+                                    upload.status === 'error' ? 
+                                    upload.error :
+                                    `${upload.progress.toFixed(1)}% - ${formatFileSize(upload.file.size)}`
+                                }
+                            />
+                            {upload.status === 'uploading' && (
+                                <LinearProgress 
+                                    variant="determinate"
+                                    value={upload.progress}
+                                    sx={{ width: 100, ml: 2 }}
+                                />
+                            )}
+                        </ListItem>
+                    ))}
+                </List>
+            </Paper>
+        )
+    );
+
+    const renderFileList = () => (
+        <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="h6">
+                    My Files
+                </Typography>
+                <Button
+                    size="small"
+                    onClick={() => setSortOrder(prev => ({
+                        ...prev,
+                        direction: prev.direction === 'asc' ? 'desc' : 'asc'
+                    }))}
+                >
+                    Sort by {sortOrder.field} ({sortOrder.direction})
+                </Button>
+            </Box>
+            
+            <List>
+                {files.map(file => (
+                    <ListItem
+                        key={file.id}
+                        sx={{
+                            '&:hover': {
+                                bgcolor: 'action.hover'
+                            }
+                        }}
+                    >
+                        <ListItemIcon>
+                            {getFileIcon(file.type)}
+                        </ListItemIcon>
+                        <ListItemText
+                            primary={file.name}
+                            secondary={`${formatFileSize(file.size)} - ${new Date(file.created_at).toLocaleString()}`}
+                        />
+                        <IconButton onClick={(e) => {
                             setSelectedFile(file);
-                            setDeleteConfirmOpen(true);
-                          }}
-                          title="Delete"
-                          color="error"
-                        >
-                          <DeleteIcon />
+                            setContextMenu(e.currentTarget);
+                        }}>
+                            <MoreVert />
                         </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                    </ListItem>
+                ))}
+                
+                {loading && (
+                    <ListItem>
+                        <LinearProgress sx={{ width: '100%' }} />
+                    </ListItem>
                 )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+            </List>
+
+            {files.length === 0 && !loading && (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography color="text.secondary">
+                        No files uploaded yet
+                    </Typography>
+                </Box>
+            )}
+
+            {/* Infinite scroll trigger */}
+            {!loading && files.length >= page * 20 && (
+                <Button
+                    fullWidth
+                    onClick={() => setPage(p => p + 1)}
+                    sx={{ mt: 2 }}
+                >
+                    Load More
+                </Button>
+            )}
         </Paper>
+    );
 
-        {/* Delete Confirmation Dialog */}
-        <Dialog
-          open={deleteConfirmOpen}
-          onClose={() => setDeleteConfirmOpen(false)}
-        >
-          <DialogTitle>Delete File</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              Are you sure you want to delete "{selectedFile?.name}"?
-              This action cannot be undone.
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
-            <Button onClick={handleDelete} color="error" variant="contained">
-              Delete
-            </Button>
-          </DialogActions>
-        </Dialog>
+    return (
+        <Container maxWidth="lg" sx={{ py: 4 }}>
+            <Typography variant="h4" gutterBottom>
+                Cloud Storage
+            </Typography>
 
-        {/* Notifications */}
-        <Snackbar
-          open={!!error}
-          autoHideDuration={6000}
-          onClose={() => setError('')}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        >
-          <Alert severity="error" onClose={() => setError('')}>
-            {error}
-          </Alert>
-        </Snackbar>
+            <Grid container spacing={3}>
+                <Grid item xs={12}>
+                    {renderStorageInfo()}
+                    {renderUploadArea()}
+                    {renderUploads()}
+                    {renderFileList()}
+                </Grid>
+            </Grid>
 
-        <Snackbar
-          open={!!success}
-          autoHideDuration={6000}
-          onClose={() => setSuccess('')}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        >
-          <Alert severity="success" onClose={() => setSuccess('')}>
-            {success}
-          </Alert>
-        </Snackbar>
-      </Container>
-    </Box>
-  );
+            {/* Context Menu */}
+            <Menu
+                anchorEl={contextMenu}
+                open={Boolean(contextMenu)}
+                onClose={() => setContextMenu(null)}
+            >
+                <MenuItem onClick={() => {
+                    handleDownload(selectedFile);
+                    setContextMenu(null);
+                }}>
+                    <ListItemIcon>
+                        <Download fontSize="small" />
+                    </ListItemIcon>
+                    Download
+                </MenuItem>
+                <MenuItem 
+                    onClick={() => {
+                        handleDelete(selectedFile);
+                        setContextMenu(null);
+                    }}
+                    sx={{ color: 'error.main' }}
+                >
+                    <ListItemIcon>
+                        <Delete fontSize="small" color="error" />
+                    </ListItemIcon>
+                    Delete
+                </MenuItem>
+            </Menu>
+
+            {/* Notifications */}
+            <Snackbar
+                open={Boolean(error)}
+                autoHideDuration={6000}
+                onClose={() => setError('')}
+            >
+                <Alert severity="error" onClose={() => setError('')}>
+                    {error}
+                </Alert>
+            </Snackbar>
+
+            <Snackbar
+                open={Boolean(success)}
+                autoHideDuration={3000}
+                onClose={() => setSuccess('')}
+            >
+                <Alert severity="success" onClose={() => setSuccess('')}>
+                    {success}
+                </Alert>
+            </Snackbar>
+        </Container>
+    );
 };
 
 export default CloudStorage;

@@ -1,18 +1,18 @@
 const db = require('../config/database');
+const path = require('path');
+const fs = require('fs').promises;
 
 const storageController = {
     // Get storage quota
     getQuota: async (req, res) => {
         try {
-            // Cek apakah user sudah memiliki quota
-            let [rows] = await db.execute(
+            const [rows] = await db.execute(
                 'SELECT total_quota as total, used_quota as used FROM storage_quotas WHERE user_id = ?',
                 [req.user.id]
             );
 
-            // Jika belum ada quota, buat baru
             if (rows.length === 0) {
-                // Default quota berdasarkan role
+                // Default quota based on user role
                 const defaultQuota = req.user.role === 'premium' ? 15 * 1024 * 1024 * 1024 : 5 * 1024 * 1024 * 1024;
                 
                 await db.execute(
@@ -20,10 +20,10 @@ const storageController = {
                     [req.user.id, defaultQuota]
                 );
 
-                rows = [{
+                return res.json({
                     total: defaultQuota,
                     used: 0
-                }];
+                });
             }
 
             res.json(rows[0]);
@@ -66,16 +66,25 @@ const storageController = {
                 return res.status(400).json({ message: 'Storage quota exceeded' });
             }
 
-            // Save file to database
+            // Generate unique filename
+            const filename = `${Date.now()}-${req.file.originalname}`;
+            const uploadDir = path.join(__dirname, '../uploads');
+            
+            // Ensure upload directory exists
+            await fs.mkdir(uploadDir, { recursive: true });
+            
+            // Save file
+            await fs.writeFile(path.join(uploadDir, filename), fileBuffer);
+
+            // Save to database
             const [result] = await db.execute(
-                'INSERT INTO stored_files (user_id, filename, original_name, mime_type, size, file_data) VALUES (?, ?, ?, ?, ?, ?)',
+                'INSERT INTO stored_files (user_id, filename, original_name, mime_type, size) VALUES (?, ?, ?, ?, ?)',
                 [
                     req.user.id,
-                    Date.now() + '-' + req.file.originalname,
+                    filename,
                     req.file.originalname,
                     req.file.mimetype,
-                    req.file.size,
-                    fileBuffer
+                    req.file.size
                 ]
             );
 
@@ -110,10 +119,14 @@ const storageController = {
             }
 
             const fileData = file[0];
+            const filePath = path.join(__dirname, '../uploads', fileData.filename);
             
             res.setHeader('Content-Type', fileData.mime_type);
             res.setHeader('Content-Disposition', `attachment; filename="${fileData.original_name}"`);
-            res.send(fileData.file_data);
+            
+            // Stream the file
+            const fileStream = fs.createReadStream(filePath);
+            fileStream.pipe(res);
         } catch (error) {
             console.error('Download error:', error);
             res.status(500).json({ message: 'Failed to download file' });
@@ -124,7 +137,7 @@ const storageController = {
     deleteFile: async (req, res) => {
         try {
             const [file] = await db.execute(
-                'SELECT size FROM stored_files WHERE id = ? AND user_id = ?',
+                'SELECT * FROM stored_files WHERE id = ? AND user_id = ?',
                 [req.params.id, req.user.id]
             );
 
@@ -132,11 +145,12 @@ const storageController = {
                 return res.status(404).json({ message: 'File not found' });
             }
 
-            // Delete file
-            await db.execute(
-                'DELETE FROM stored_files WHERE id = ?',
-                [req.params.id]
-            );
+            // Delete file from storage
+            const filePath = path.join(__dirname, '../uploads', file[0].filename);
+            await fs.unlink(filePath);
+
+            // Delete from database
+            await db.execute('DELETE FROM stored_files WHERE id = ?', [req.params.id]);
 
             // Update used quota
             await db.execute(

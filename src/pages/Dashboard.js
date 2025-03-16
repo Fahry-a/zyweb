@@ -79,24 +79,22 @@ const StorageTab = () => {
         storageApi.getQuota(),
         storageApi.getFiles()
       ]);
-      
-      // Set quota dengan total storage berdasarkan role
+    
       const totalStorage = getTotalStorageByRole(user?.role);
       setQuota({
-        used: quotaData.data.used || 0,
+       used: quotaData.data.used || 0,
         total: totalStorage
       });
       setFiles(filesData.data);
     } catch (error) {
       console.error('Failed to load storage data:', error);
-      // Set default quota jika terjadi error
       const totalStorage = getTotalStorageByRole(user?.role);
       setQuota({
-        used: 0,
-        total: totalStorage
+      used: 0,
+      total: totalStorage
       });
-    }
-  }, [user?.role]); // Tambahkan user?.role sebagai dependency
+    } 
+}, [user?.role]); // Tambahkan user?.role sebagai dependency
 
   useEffect(() => {
     loadStorageData();

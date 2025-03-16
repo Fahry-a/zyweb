@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
+const { createStorageQuota } = require('../utils/storageQuota');
 
 const authController = {
   register: async (req, res, next) => {
@@ -30,7 +31,11 @@ const authController = {
         'INSERT INTO users (name, email, password, role, suspended) VALUES (?, ?, ?, ?, ?)',
         [name, email, hashedPassword, 'user', 0]
       );
-
+      
+      await createStorageQuota(userId, 'user');
+      
+      await connection.commit();
+      
       // Create token
       const token = jwt.sign(
         { 
