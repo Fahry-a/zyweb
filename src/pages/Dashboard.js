@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Container,
@@ -21,15 +21,14 @@ import {
   IconButton,
   Grid,
   Chip,
+  Paper,
   Tabs,
   Tab,
-  LinearProgress,
   List,
   ListItem,
   ListItemIcon,
   ListItemText,
-  ListItemSecondary,
-  Paper,
+  LinearProgress,
 } from '@mui/material';
 import {
   ExitToApp as LogoutIcon,
@@ -51,87 +50,67 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { changePassword, deleteAccount } from '../services/api';
 import { storageApi } from '../services/storage';
 import { chatApi } from '../services/chat';
+import api from '../services/api';
 
-// Overview Tab Component
-const OverviewTab = ({ user }) => {
-  return (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
-        <Card elevation={3}>
-          <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-              <Avatar
-                sx={{
-                  width: 80,
-                  height: 80,
-                  bgcolor: user?.role === 'admin' ? 'warning.main' : 
-                          user?.role === 'premium' ? 'success.main' : 'primary.main',
-                  mr: 2,
-                }}
-              >
-                {user?.role === 'admin' ? <AdminIcon sx={{ fontSize: 40 }} /> :
-                 user?.role === 'premium' ? <PremiumIcon sx={{ fontSize: 40 }} /> :
-                 <PersonIcon sx={{ fontSize: 40 }} />}
-              </Avatar>
-              <Box>
-                <Typography variant="h4" gutterBottom>
-                  Welcome, {user?.name}!
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                  {user?.email}
-                </Typography>
-                <Box sx={{ mt: 1 }}>
-                  <Chip
-                    icon={user?.role === 'admin' ? <AdminIcon /> : 
-                          user?.role === 'premium' ? <PremiumIcon /> : 
-                          <PersonIcon />}
-                    label={user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'}
-                    color={user?.role === 'admin' ? 'warning' : 
-                           user?.role === 'premium' ? 'success' : 
-                           'primary'}
-                    size="small"
-                    sx={{ mr: 1 }}
-                  />
-                </Box>
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
-      </Grid>
-    </Grid>
-  );
-};
-
-// Storage Tab Component
 const StorageTab = () => {
+  const { user } = useAuth();
   const [files, setFiles] = useState([]);
   const [quota, setQuota] = useState({ used: 0, total: 0 });
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  useEffect(() => {
-    loadStorageData();
-  }, []);
+  // Fungsi untuk mendapatkan total storage berdasarkan role
+  const getTotalStorageByRole = (role) => {
+    switch (role) {
+      case 'premium':
+        return 15 * 1024 * 1024 * 1024; // 15GB dalam bytes
+      case 'admin':
+      case 'user':
+      default:
+        return 5 * 1024 * 1024 * 1024; // 5GB dalam bytes
+    }
+  };
 
-  const loadStorageData = async () => {
+  const loadStorageData = useCallback(async () => {
     try {
       const [quotaData, filesData] = await Promise.all([
         storageApi.getQuota(),
         storageApi.getFiles()
       ]);
-      setQuota(quotaData.data);
+      
+      // Set quota dengan total storage berdasarkan role
+      const totalStorage = getTotalStorageByRole(user?.role);
+      setQuota({
+        used: quotaData.data.used || 0,
+        total: totalStorage
+      });
       setFiles(filesData.data);
     } catch (error) {
       console.error('Failed to load storage data:', error);
+      // Set default quota jika terjadi error
+      const totalStorage = getTotalStorageByRole(user?.role);
+      setQuota({
+        used: 0,
+        total: totalStorage
+      });
     }
-  };
+  }, [user?.role]); // Tambahkan user?.role sebagai dependency
+
+  useEffect(() => {
+    loadStorageData();
+  }, [loadStorageData]); // Gunakan loadStorageData sebagai dependency
 
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
+
+    // Check if upload would exceed storage limit
+    if (quota.used + file.size > quota.total) {
+      alert('Not enough storage space. Please free up some space or upgrade to premium.');
+      return;
+    }
 
     setUploading(true);
     setUploadProgress(0);
@@ -140,21 +119,33 @@ const StorageTab = () => {
       await storageApi.uploadFile(file, (progress) => {
         setUploadProgress(progress);
       });
-      loadStorageData();
+      loadStorageData(); // Reload storage data after successful upload
     } catch (error) {
       console.error('Failed to upload file:', error);
+      alert('Failed to upload file. Please try again.');
     } finally {
       setUploading(false);
     }
   };
 
+  // Tambahkan fungsi handleFileDelete yang sebelumnya tidak ada
   const handleFileDelete = async (fileId) => {
     try {
       await storageApi.deleteFile(fileId);
-      loadStorageData();
+      loadStorageData(); // Reload data setelah file dihapus
     } catch (error) {
       console.error('Failed to delete file:', error);
+      alert('Failed to delete file. Please try again.');
     }
+  };
+
+  // Format bytes to human readable size
+  const formatSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (
@@ -164,15 +155,22 @@ const StorageTab = () => {
           <CardContent>
             <Box sx={{ mb: 3 }}>
               <Typography variant="h6" gutterBottom>
-                Storage Usage
+                Storage Usage ({user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1)} Account)
               </Typography>
               <LinearProgress 
                 variant="determinate" 
                 value={(quota.used / quota.total) * 100}
-                sx={{ height: 10, borderRadius: 5 }}
+                sx={{ 
+                  height: 10, 
+                  borderRadius: 5,
+                  bgcolor: 'grey.300',
+                  '& .MuiLinearProgress-bar': {
+                    bgcolor: (quota.used / quota.total) > 0.9 ? 'error.main' : 'primary.main'
+                  }
+                }}
               />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                {Math.round(quota.used / 1024 / 1024 / 1024)}GB of {Math.round(quota.total / 1024 / 1024 / 1024)}GB used
+                {formatSize(quota.used)} of {formatSize(quota.total)} used ({Math.round((quota.used / quota.total) * 100)}%)
               </Typography>
             </Box>
 
@@ -188,11 +186,16 @@ const StorageTab = () => {
                   variant="contained"
                   component="span"
                   startIcon={<CloudUploadIcon />}
-                  disabled={uploading}
+                  disabled={uploading || quota.used >= quota.total}
                 >
                   Upload File
                 </Button>
               </label>
+              {quota.used >= quota.total && (
+                <Typography variant="caption" color="error" sx={{ ml: 2 }}>
+                  Storage full! {user?.role !== 'premium' && 'Consider upgrading to Premium for more storage.'}
+                </Typography>
+              )}
             </Box>
 
             {uploading && (
@@ -224,7 +227,7 @@ const StorageTab = () => {
                   </ListItemIcon>
                   <ListItemText
                     primary={file.name}
-                    secondary={`${(file.size / 1024 / 1024).toFixed(2)} MB • ${new Date(file.createdAt).toLocaleDateString()}`}
+                    secondary={`${formatSize(file.size)} • ${new Date(file.createdAt).toLocaleDateString()}`}
                   />
                 </ListItem>
               ))}
@@ -296,7 +299,7 @@ const ChatTab = () => {
                 onClick={() => setSelectedChat(chat)}
               >
                 <ListItemIcon>
-                  {chat.type === 'group' ? <PersonIcon /> : <PersonIcon />}
+                  <PersonIcon />
                 </ListItemIcon>
                 <ListItemText
                   primary={chat.name || 'Chat'}
@@ -376,11 +379,113 @@ const ChatTab = () => {
   );
 };
 
+// Overview Tab Component
+const OverviewTab = ({ user, onChangePassword, onDeleteAccount }) => {
+  const navigate = useNavigate();
+
+  return (
+    <Grid container spacing={3}>
+      <Grid item xs={12}>
+        <Card elevation={3}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+              <Avatar
+                sx={{
+                  width: 80,
+                  height: 80,
+                  bgcolor: user?.role === 'admin' ? 'warning.main' : 
+                          user?.role === 'premium' ? 'success.main' : 'primary.main',
+                  mr: 2,
+                }}
+              >
+                {user?.role === 'admin' ? <AdminIcon sx={{ fontSize: 40 }} /> :
+                 user?.role === 'premium' ? <PremiumIcon sx={{ fontSize: 40 }} /> :
+                 <PersonIcon sx={{ fontSize: 40 }} />}
+              </Avatar>
+              <Box>
+                <Typography variant="h4" gutterBottom>
+                  Welcome, {user?.name}!
+                </Typography>
+                <Typography variant="body1" color="text.secondary">
+                  {user?.email}
+                </Typography>
+                <Box sx={{ mt: 1 }}>
+                  <Chip
+                    icon={user?.role === 'admin' ? <AdminIcon /> : 
+                          user?.role === 'premium' ? <PremiumIcon /> : 
+                          <PersonIcon />}
+                    label={user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'}
+                    color={user?.role === 'admin' ? 'warning' : 
+                           user?.role === 'premium' ? 'success' : 
+                           'primary'}
+                    size="small"
+                    sx={{ mr: 1 }}
+                  />
+                </Box>
+              </Box>
+            </Box>
+
+            <Divider sx={{ my: 2 }} />
+
+            {/* Action Buttons */}
+            <Box sx={{ mt: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <Button
+                variant="contained"
+                startIcon={<KeyIcon />}
+                onClick={onChangePassword}
+                sx={{
+                  bgcolor: 'primary.main',
+                  '&:hover': { bgcolor: 'primary.dark' },
+                }}
+              >
+                Change Password
+              </Button>
+
+              {user?.role === 'admin' && (
+                <Button
+                  variant="contained"
+                  color="warning"
+                  startIcon={<AdminIcon />}
+                  onClick={() => navigate('/admin')}
+                  sx={{
+                    bgcolor: 'warning.main',
+                    '&:hover': { bgcolor: 'warning.dark' },
+                  }}
+                >
+                  Admin Dashboard
+                </Button>
+              )}
+
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={onDeleteAccount}
+                sx={{
+                  borderColor: 'error.main',
+                  color: 'error.main',
+                  '&:hover': {
+                    bgcolor: 'error.main',
+                    color: 'white',
+                  },
+                }}
+              >
+                Delete Account
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      </Grid>
+    </Grid>
+  );
+};
+
 // Main Dashboard Component
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [currentDateTime, setCurrentDateTime] = useState('');
+  const [tabValue, setTabValue] = useState(0);
   const [openPasswordDialog, setOpenPasswordDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [passwordData, setPasswordData] = useState({
@@ -391,7 +496,6 @@ const Dashboard = () => {
   const [deletePassword, setDeletePassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [tabValue, setTabValue] = useState(0);
 
   useEffect(() => {
     const updateDateTime = () => {
@@ -438,7 +542,7 @@ const Dashboard = () => {
     }
 
     try {
-      await changePassword({
+      await api.post('/users/change-password', {
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
       });
@@ -457,7 +561,7 @@ const Dashboard = () => {
 
   const handleDeleteAccount = async () => {
     try {
-      await deleteAccount(deletePassword);
+      await api.post('/users/delete-account', { password: deletePassword });
       logout();
       navigate('/');
     } catch (err) {
@@ -467,7 +571,7 @@ const Dashboard = () => {
 
   return (
     <Box sx={{ bgcolor: 'background.default', minHeight: '100vh' }}>
-        <AppBar position="static" elevation={0}>
+      <AppBar position="static" elevation={0}>
         <Toolbar>
           <DashboardIcon sx={{ mr: 2 }} />
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
@@ -506,8 +610,9 @@ const Dashboard = () => {
             <LogoutIcon />
           </IconButton>
         </Toolbar>
-        <Tabs 
-          value={tabValue} 
+
+        <Tabs
+          value={tabValue}
           onChange={(e, newValue) => setTabValue(newValue)}
           sx={{ bgcolor: 'primary.dark' }}
         >
@@ -518,7 +623,13 @@ const Dashboard = () => {
       </AppBar>
 
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        {tabValue === 0 && <OverviewTab user={user} />}
+        {tabValue === 0 && (
+          <OverviewTab 
+            user={user}
+            onChangePassword={handleOpenPasswordDialog}
+            onDeleteAccount={handleOpenDeleteDialog}
+          />
+        )}
         {tabValue === 1 && <StorageTab />}
         {tabValue === 2 && <ChatTab />}
 

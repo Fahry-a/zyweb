@@ -1,5 +1,5 @@
 import React from 'react';
-
+import { useNavigate } from 'react-router-dom'; // Tambahkan import ini
 import {
   Box,
   Container,
@@ -21,6 +21,8 @@ import {
 } from '@mui/icons-material';
 
 const Landing = () => {
+  const navigate = useNavigate(); // Tambahkan hook useNavigate
+
   return (
     <Box sx={{ bgcolor: 'background.default', minHeight: '100vh' }}>
       {/* Hero Section */}
@@ -36,16 +38,34 @@ const Landing = () => {
           <Typography variant="h5" gutterBottom sx={{ mb: 4 }}>
             Store, share, and communicate - all in one place
           </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            sx={{ 
-              bgcolor: 'secondary.main',
-              '&:hover': { bgcolor: 'secondary.dark' }
-            }}
-          >
-            Get Started
-          </Button>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="contained"
+              size="large"
+              onClick={() => navigate('/register')} // Tambahkan onClick event
+              sx={{ 
+                bgcolor: 'secondary.main',
+                '&:hover': { bgcolor: 'secondary.dark' }
+              }}
+            >
+              Get Started
+            </Button>
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={() => navigate('/login')} // Tambahkan tombol login
+              sx={{ 
+                color: 'white',
+                borderColor: 'white',
+                '&:hover': { 
+                  borderColor: 'secondary.main',
+                  color: 'secondary.main'
+                }
+              }}
+            >
+              Login
+            </Button>
+          </Box>
         </Container>
       </Box>
 
