@@ -142,45 +142,83 @@ const adminController = {
   },
 
   createUser: async (req, res, next) => {
+    const connection = await db.getConnection();
+    
     try {
+      await connection.beginTransaction();
+      
       const { name, email, password, role } = req.body;
 
+      // Validate input
       if (!name || !email || !password || !role) {
-        return res.status(400).json({ message: 'All fields are required' });
+        return res.status(400).json({ 
+          message: 'All fields are required',
+          fields: {
+            name: !name ? 'Name is required' : null,
+            email: !email ? 'Email is required' : null,
+            password: !password ? 'Password is required' : null,
+            role: !role ? 'Role is required' : null
+          }
+        });
       }
 
-      const [existingUsers] = await db.execute(
+      // Check if email exists
+      const [existingUsers] = await connection.execute(
         'SELECT id FROM users WHERE email = ?',
         [email]
       );
 
       if (existingUsers.length > 0) {
+        await connection.rollback();
         return res.status(400).json({ message: 'Email already registered' });
       }
 
+      // Hash password
       const hashedPassword = await bcrypt.hash(password, 12);
 
-      const [result] = await db.execute(
-        'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
-        [name, email, hashedPassword, role]
+      // Insert user
+      const [result] = await connection.execute(
+        'INSERT INTO users (name, email, password, role, suspended) VALUES (?, ?, ?, ?, ?)',
+        [name, email, hashedPassword, role, 0]
       );
 
-      await db.execute(
-        'INSERT INTO admin_logs (action, user_id, details) VALUES (?, ?, ?)',
-        ['CREATE_USER', req.user.id, `Created user: ${email}`]
+      const userId = result.insertId;
+
+      // Set storage quota based on role
+      const quotaSize = role === 'premium' ? 10737418240 : 1073741824; // 10GB for premium, 1GB for regular
+      
+      // Create storage quota
+      await connection.execute(
+        'INSERT INTO storage_quotas (user_id, total_quota, used_quota) VALUES (?, ?, ?)',
+        [userId, quotaSize, 0]
       );
+
+      // Log the action
+      await connection.execute(
+        'INSERT INTO admin_logs (action, user_id, details) VALUES (?, ?, ?)',
+        ['CREATE_USER', req.user.id, `Created user: ${email} with role: ${role}`]
+      );
+
+      await connection.commit();
 
       res.status(201).json({
         message: 'User created successfully',
         user: {
-          id: result.insertId,
+          id: userId,
           name,
           email,
           role
         }
       });
     } catch (error) {
-      next(error);
+      await connection.rollback();
+      console.error('Error creating user:', error);
+      res.status(500).json({ 
+        message: 'Failed to create user',
+        error: error.message 
+      });
+    } finally {
+      connection.release();
     }
   },
 

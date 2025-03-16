@@ -106,20 +106,107 @@ const AdminDashboard = () => {
   }, [tabValue]);
 
   const handleAddUser = async () => {
-    try {
-      if (!addForm.name || !addForm.email || !addForm.password) {
-        setError('All fields are required');
-        return;
-      }
-      await api.post('/admin/users', addForm);
-      setSuccess('User added successfully');
-      setOpenAddDialog(false);
-      setAddForm({ name: '', email: '', password: '', role: 'user' });
-      fetchData();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add user');
+  try {
+    setError(null);
+    
+    // Validate form
+    if (!addForm.name || !addForm.email || !addForm.password || !addForm.role) {
+      setError('All fields are required');
+      return;
     }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(addForm.email)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    // Password validation
+    if (addForm.password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+
+    const response = await api.post('/admin/users', addForm);
+    
+    // Show success message
+    setSuccess('User added successfully');
+    
+    // Clear form
+    setAddForm({
+      name: '',
+      email: '',
+      password: '',
+      role: 'user'
+    });
+    
+    // Close dialog
+    setOpenAddDialog(false);
+    
+    // Refresh user list
+    fetchData();
+    
+  } catch (err) {
+    console.error('Error adding user:', err);
+    setError(err.response?.data?.message || 'Failed to add user. Please try again.');
+  }
   };
+  
+const AddUserDialog = () => (
+  <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
+    <DialogTitle>Add New User</DialogTitle>
+    <DialogContent>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      <TextField
+        autoFocus
+        margin="dense"
+        label="Name"
+        type="text"
+        fullWidth
+        value={addForm.name}
+        onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+      />
+      <TextField
+        margin="dense"
+        label="Email"
+        type="email"
+        fullWidth
+        value={addForm.email}
+        onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+      />
+      <TextField
+        margin="dense"
+        label="Password"
+        type="password"
+        fullWidth
+        value={addForm.password}
+        onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
+      />
+      <FormControl fullWidth margin="dense">
+        <InputLabel>Role</InputLabel>
+        <Select
+          value={addForm.role}
+          onChange={(e) => setAddForm({ ...addForm, role: e.target.value })}
+        >
+          <MenuItem value="user">User</MenuItem>
+          <MenuItem value="premium">Premium</MenuItem>
+          <MenuItem value="admin">Admin</MenuItem>
+        </Select>
+      </FormControl>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={() => setOpenAddDialog(false)}>Cancel</Button>
+      <Button onClick={handleAddUser} variant="contained" color="primary">
+        Add User
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
 
   const handleEditUser = (user) => {
     setSelectedUser(user);

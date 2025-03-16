@@ -8,12 +8,10 @@ const authController = {
     try {
       const { name, email, password } = req.body;
 
-      // Validate input
       if (!name || !email || !password) {
         return res.status(400).json({ message: 'All fields are required' });
       }
 
-      // Check if email already exists
       const [existingUsers] = await db.execute(
         'SELECT id FROM users WHERE email = ?',
         [email]
@@ -23,20 +21,16 @@ const authController = {
         return res.status(400).json({ message: 'Email already registered' });
       }
 
-      // Hash password
       const hashedPassword = await bcrypt.hash(password, 12);
 
-      // Insert new user
       const [result] = await db.execute(
         'INSERT INTO users (name, email, password, role, suspended) VALUES (?, ?, ?, ?, ?)',
         [name, email, hashedPassword, 'user', 0]
       );
-      
+
+      const userId = result.insertId;
       await createStorageQuota(userId, 'user');
-      
-      await connection.commit();
-      
-      // Create token
+
       const token = jwt.sign(
         { 
           userId: result.insertId, 
@@ -66,7 +60,6 @@ const authController = {
     try {
       const { email, password } = req.body;
 
-      // Validate input
       if (!email || !password) {
         return res.status(400).json({ 
           message: 'Email and password are required',
@@ -77,7 +70,6 @@ const authController = {
         });
       }
 
-      // Get user
       const [users] = await db.execute(
         'SELECT * FROM users WHERE email = ?',
         [email]
@@ -89,19 +81,16 @@ const authController = {
 
       const user = users[0];
 
-      // Check if user is suspended
       if (user.suspended) {
         return res.status(403).json({ message: 'Your account has been suspended' });
       }
 
-      // Verify password with constant-time comparison
       const isValidPassword = await bcrypt.compare(password, user.password);
 
       if (!isValidPassword) {
         return res.status(401).json({ message: 'Invalid email or password' });
       }
 
-      // Create token with all necessary user data
       const token = jwt.sign(
         { 
           userId: user.id,
@@ -113,13 +102,11 @@ const authController = {
         { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
       );
 
-      // Update last login timestamp
       await db.execute(
         'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?',
         [user.id]
       );
 
-      // Remove sensitive data before sending response
       const { password: _, ...userWithoutPassword } = user;
 
       res.json({
@@ -137,7 +124,6 @@ const authController = {
       const { currentPassword, newPassword } = req.body;
       const userId = req.user.id;
 
-      // Get user with password
       const [users] = await db.execute(
         'SELECT * FROM users WHERE id = ?',
         [userId]
@@ -147,22 +133,18 @@ const authController = {
         return res.status(404).json({ message: 'User not found' });
       }
 
-      // Check if user is suspended
       if (users[0].suspended) {
         return res.status(403).json({ message: 'Your account has been suspended' });
       }
 
-      // Verify current password
       const isValidPassword = await bcrypt.compare(currentPassword, users[0].password);
 
       if (!isValidPassword) {
         return res.status(401).json({ message: 'Current password is incorrect' });
       }
 
-      // Hash new password
       const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-      // Update password
       await db.execute(
         'UPDATE users SET password = ? WHERE id = ?',
         [hashedPassword, userId]
@@ -179,7 +161,6 @@ const authController = {
       const { password } = req.body;
       const userId = req.user.id;
 
-      // Get user with password
       const [users] = await db.execute(
         'SELECT * FROM users WHERE id = ?',
         [userId]
@@ -189,19 +170,20 @@ const authController = {
         return res.status(404).json({ message: 'User not found' });
       }
 
-      // Check if user is suspended
       if (users[0].suspended) {
         return res.status(403).json({ message: 'Your account has been suspended' });
       }
 
-      // Verify password
       const isValidPassword = await bcrypt.compare(password, users[0].password);
 
       if (!isValidPassword) {
         return res.status(401).json({ message: 'Password is incorrect' });
       }
+      
+      await connection.execute('DELETE FROM stored_files WHERE user_id = ?', [userId]);
+      
+      await connection.execute('DELETE FROM storage_quotas WHERE user_id = ?', [userId]);
 
-      // Delete user's data
       await db.execute('DELETE FROM users WHERE id = ?', [userId]);
 
       res.json({ message: 'Account deleted successfully' });

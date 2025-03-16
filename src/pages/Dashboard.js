@@ -581,6 +581,7 @@ const Dashboard = () => {
   const handleSubmitPasswordChange = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
     if (passwordData.newPassword !== passwordData.confirmNewPassword) {
       setError('New passwords do not match');
@@ -588,12 +589,18 @@ const Dashboard = () => {
     }
 
     try {
-      await api.post('/users/change-password', {
+      await api.post('/auth/change-password', {
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
       });
+      
       setSuccess('Password changed successfully');
       setOpenPasswordDialog(false);
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmNewPassword: '',
+      });
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to change password');
     }
