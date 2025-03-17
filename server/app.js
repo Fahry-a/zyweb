@@ -8,7 +8,7 @@ const db = require('./config/database');
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/user');
-const storageRoutes = require('./routes/storage');
+const storageRoutes = require('./routes/storageRoutes');
 
 // Load environment variables
 dotenv.config();
@@ -17,7 +17,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: process.env.CLIENT_URL,
   credentials: true
 }));
 app.use(express.json());

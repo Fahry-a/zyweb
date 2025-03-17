@@ -1,167 +1,188 @@
 const db = require('../config/database');
 const path = require('path');
-const fs = require('fs').promises;
+const fs = require('fs');
+const util = require('util');
+const { promisify } = require('util');
 
 const storageController = {
-    // Get storage quota
-    getQuota: async (req, res) => {
+    // Get user's storage info
+    async getStorageInfo(req, res) {
         try {
-            const [rows] = await db.execute(
-                'SELECT total_quota as total, used_quota as used FROM storage_quotas WHERE user_id = ?',
-                [req.user.id]
+            const userId = req.user.id;
+            const [quota] = await db.query(
+                'SELECT total_quota, used_quota FROM storage_quotas WHERE user_id = ?',
+                [userId]
             );
 
-            if (rows.length === 0) {
-                // Default quota based on user role
-                const defaultQuota = req.user.role === 'premium' ? 15 * 1024 * 1024 * 1024 : 5 * 1024 * 1024 * 1024;
-                
-                await db.execute(
-                    'INSERT INTO storage_quotas (user_id, total_quota, used_quota) VALUES (?, ?, 0)',
-                    [req.user.id, defaultQuota]
-                );
-
-                return res.json({
-                    total: defaultQuota,
-                    used: 0
+            if (!quota.length) {
+                return res.status(404).json({ 
+                    message: 'Storage quota not found' 
                 });
             }
 
-            res.json(rows[0]);
+            res.json({
+                totalQuota: quota[0].total_quota,
+                usedQuota: quota[0].used_quota,
+                remainingQuota: quota[0].total_quota - quota[0].used_quota
+            });
         } catch (error) {
-            console.error('Get quota error:', error);
-            res.status(500).json({ message: 'Failed to get storage quota' });
+            console.error('Error getting storage info:', error);
+            res.status(500).json({ 
+                message: 'Internal server error' 
+            });
         }
     },
 
-    // Get list of files
-    getFiles: async (req, res) => {
+    // Get user's files
+    async getFiles(req, res) {
         try {
-            const [files] = await db.execute(
-                'SELECT id, original_name as name, mime_type as type, size, created_at FROM stored_files WHERE user_id = ? ORDER BY created_at DESC',
-                [req.user.id]
+            const userId = req.user.id;
+            const [files] = await db.query(
+                `SELECT id, filename, original_name, mime_type, size, created_at 
+                 FROM stored_files 
+                 WHERE user_id = ? 
+                 ORDER BY created_at DESC`,
+                [userId]
             );
+
             res.json(files);
         } catch (error) {
-            console.error('Get files error:', error);
-            res.status(500).json({ message: 'Failed to get files' });
+            console.error('Error getting files:', error);
+            res.status(500).json({ 
+                message: 'Internal server error' 
+            });
         }
     },
 
     // Upload file
-    uploadFile: async (req, res) => {
+    async uploadFile(req, res) {
         try {
-            if (!req.file) {
-                return res.status(400).json({ message: 'No file uploaded' });
+            const userId = req.user.id;
+            const file = req.file;
+
+            if (!file) {
+                return res.status(400).json({ 
+                    message: 'No file uploaded' 
+                });
             }
 
-            const fileBuffer = req.file.buffer;
-            
-            // Check storage quota
-            const [quota] = await db.execute(
+            // Check user's quota
+            const [quota] = await db.query(
                 'SELECT total_quota, used_quota FROM storage_quotas WHERE user_id = ?',
-                [req.user.id]
+                [userId]
             );
 
-            if (quota[0].used_quota + req.file.size > quota[0].total_quota) {
-                return res.status(400).json({ message: 'Storage quota exceeded' });
+            if (!quota.length || (quota[0].used_quota + file.size) > quota[0].total_quota) {
+                return res.status(400).json({ 
+                    message: 'Storage quota exceeded' 
+                });
             }
 
-            // Generate unique filename
-            const filename = `${Date.now()}-${req.file.originalname}`;
-            const uploadDir = path.join(__dirname, '../uploads');
-            
-            // Ensure upload directory exists
-            await fs.mkdir(uploadDir, { recursive: true });
-            
-            // Save file
-            await fs.writeFile(path.join(uploadDir, filename), fileBuffer);
+            // Read file data
+            const fileData = await promisify(fs.readFile)(file.path);
 
-            // Save to database
-            const [result] = await db.execute(
-                'INSERT INTO stored_files (user_id, filename, original_name, mime_type, size) VALUES (?, ?, ?, ?, ?)',
-                [
-                    req.user.id,
-                    filename,
-                    req.file.originalname,
-                    req.file.mimetype,
-                    req.file.size
-                ]
+            // Store file in database
+            const [result] = await db.query(
+                `INSERT INTO stored_files 
+                 (user_id, filename, original_name, mime_type, size, file_data) 
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [userId, file.filename, file.originalname, file.mimetype, file.size, fileData]
             );
 
             // Update used quota
-            await db.execute(
-                'UPDATE storage_quotas SET used_quota = used_quota + ? WHERE user_id = ?',
-                [req.file.size, req.user.id]
+            await db.query(
+                `UPDATE storage_quotas 
+                 SET used_quota = used_quota + ? 
+                 WHERE user_id = ?`,
+                [file.size, userId]
             );
 
-            res.json({
+            // Delete temporary file
+            await promisify(fs.unlink)(file.path);
+
+            res.status(201).json({
                 id: result.insertId,
-                name: req.file.originalname,
-                type: req.file.mimetype,
-                size: req.file.size
+                filename: file.filename,
+                originalName: file.originalname,
+                mimeType: file.mimetype,
+                size: file.size
             });
         } catch (error) {
-            console.error('Upload error:', error);
-            res.status(500).json({ message: 'Failed to upload file' });
+            console.error('Error uploading file:', error);
+            res.status(500).json({ 
+                message: 'Internal server error' 
+            });
         }
     },
 
     // Download file
-    downloadFile: async (req, res) => {
+    async downloadFile(req, res) {
         try {
-            const [file] = await db.execute(
-                'SELECT * FROM stored_files WHERE id = ? AND user_id = ?',
-                [req.params.id, req.user.id]
+            const userId = req.user.id;
+            const fileId = req.params.id;
+
+            const [file] = await db.query(
+                `SELECT filename, original_name, mime_type, file_data 
+                 FROM stored_files 
+                 WHERE id = ? AND user_id = ?`,
+                [fileId, userId]
             );
 
             if (!file.length) {
-                return res.status(404).json({ message: 'File not found' });
+                return res.status(404).json({ 
+                    message: 'File not found' 
+                });
             }
 
-            const fileData = file[0];
-            const filePath = path.join(__dirname, '../uploads', fileData.filename);
-            
-            res.setHeader('Content-Type', fileData.mime_type);
-            res.setHeader('Content-Disposition', `attachment; filename="${fileData.original_name}"`);
-            
-            // Stream the file
-            const fileStream = fs.createReadStream(filePath);
-            fileStream.pipe(res);
+            res.setHeader('Content-Type', file[0].mime_type);
+            res.setHeader('Content-Disposition', `attachment; filename="${file[0].original_name}"`);
+            res.send(file[0].file_data);
         } catch (error) {
-            console.error('Download error:', error);
-            res.status(500).json({ message: 'Failed to download file' });
+            console.error('Error downloading file:', error);
+            res.status(500).json({ 
+                message: 'Internal server error' 
+            });
         }
     },
 
     // Delete file
-    deleteFile: async (req, res) => {
+    async deleteFile(req, res) {
         try {
-            const [file] = await db.execute(
-                'SELECT * FROM stored_files WHERE id = ? AND user_id = ?',
-                [req.params.id, req.user.id]
+            const userId = req.user.id;
+            const fileId = req.params.id;
+
+            // Get file size first for quota update
+            const [file] = await db.query(
+                'SELECT size FROM stored_files WHERE id = ? AND user_id = ?',
+                [fileId, userId]
             );
 
             if (!file.length) {
-                return res.status(404).json({ message: 'File not found' });
+                return res.status(404).json({ 
+                    message: 'File not found' 
+                });
             }
 
-            // Delete file from storage
-            const filePath = path.join(__dirname, '../uploads', file[0].filename);
-            await fs.unlink(filePath);
-
-            // Delete from database
-            await db.execute('DELETE FROM stored_files WHERE id = ?', [req.params.id]);
+            // Delete file
+            await db.query(
+                'DELETE FROM stored_files WHERE id = ? AND user_id = ?',
+                [fileId, userId]
+            );
 
             // Update used quota
-            await db.execute(
-                'UPDATE storage_quotas SET used_quota = used_quota - ? WHERE user_id = ?',
-                [file[0].size, req.user.id]
+            await db.query(
+                `UPDATE storage_quotas 
+                 SET used_quota = used_quota - ? 
+                 WHERE user_id = ?`,
+                [file[0].size, userId]
             );
 
             res.json({ message: 'File deleted successfully' });
         } catch (error) {
-            console.error('Delete error:', error);
-            res.status(500).json({ message: 'Failed to delete file' });
+            console.error('Error deleting file:', error);
+            res.status(500).json({ 
+                message: 'Internal server error' 
+            });
         }
     }
 };

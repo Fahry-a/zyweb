@@ -1,6 +1,6 @@
 -- Membuat database jika belum ada
-CREATE DATABASE IF NOT EXISTS k;
-USE k;
+CREATE DATABASE IF NOT EXISTS zyroxi;
+USE zyroxi;
 
 -- Tabel Users
 CREATE TABLE `users` (
